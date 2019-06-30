@@ -7,6 +7,7 @@ import pickle
 
 from datetime import datetime
 
+import tomlkit
 from tomlkit import parse
 from tomlkit._utils import _utc
 
@@ -413,3 +414,50 @@ bar=1"""
     assert doc == {"foo": {"bar": 1}}
     assert doc["foo"]["bar"] == 1
     assert json.loads(json.dumps(doc)) == {"foo": {"bar": 1}}
+
+
+def test_getting_inline_table_is_still_an_inline_table():
+    content = """\
+[tool.poetry]
+name = "foo"
+
+[tool.poetry.dependencies]
+"""
+
+    doc = parse(content)
+    poetry_section = doc["tool"]["poetry"]
+    dependencies = poetry_section["dependencies"]
+    dependencies["foo"] = tomlkit.inline_table()
+    dependencies["foo"]["version"] = "^2.0"
+    dependencies["foo"]["source"] = "local"
+    doc["tool"]["poetry"] = poetry_section
+
+    assert (
+        """\
+[tool.poetry]
+name = "foo"
+
+[tool.poetry.dependencies]
+foo = {version = "^2.0", source = "local"}
+"""
+        == doc.as_string()
+    )
+
+
+def test_declare_sub_table_with_intermediate_table():
+    content = """
+[students]
+tommy = 87
+mary = 66
+
+[subjects]
+maths = "maths"
+english = "english"
+
+[students.bob]
+score = 91
+"""
+
+    doc = parse(content)
+    assert {"tommy": 87, "mary": 66, "bob": {"score": 91}} == doc["students"]
+    assert {"tommy": 87, "mary": 66, "bob": {"score": 91}} == doc.get("students")

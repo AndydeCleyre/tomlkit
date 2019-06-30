@@ -16,6 +16,7 @@ from typing import Union
 
 
 from ._compat import PY2
+from ._compat import PY38
 from ._compat import decode
 from ._compat import long
 from ._compat import unicode
@@ -72,13 +73,32 @@ def item(value, _parent=None):
     elif isinstance(value, (str, unicode)):
         escaped = escape_string(value)
 
-        return String(StringType.SLB, value, escaped, Trivia())
+        return String(StringType.SLB, decode(value), escaped, Trivia())
     elif isinstance(value, datetime):
-        return DateTime(value, Trivia(), value.isoformat().replace("+00:00", "Z"))
+        return DateTime(
+            value.year,
+            value.month,
+            value.day,
+            value.hour,
+            value.minute,
+            value.second,
+            value.microsecond,
+            value.tzinfo,
+            Trivia(),
+            value.isoformat().replace("+00:00", "Z"),
+        )
     elif isinstance(value, date):
-        return Date(value, Trivia(), value.isoformat())
+        return Date(value.year, value.month, value.day, Trivia(), value.isoformat())
     elif isinstance(value, time):
-        return Time(value, Trivia(), value.isoformat())
+        return Time(
+            value.hour,
+            value.minute,
+            value.second,
+            value.microsecond,
+            value.tzinfo,
+            Trivia(),
+            value.isoformat(),
+        )
 
     raise ValueError("Invalid type {}".format(type(value)))
 
@@ -261,6 +281,15 @@ class Item(object):
             self._trivia.indent = " " * indent
 
         return self
+
+    def is_boolean(self):  # type: () -> bool
+        return isinstance(self, Bool)
+
+    def is_table(self):  # type: () -> bool
+        return isinstance(self, Table)
+
+    def is_inline_table(self):  # type: () -> bool
+        return isinstance(self, InlineTable)
 
     def _getstate(self, protocol=3):
         return (self._trivia,)
@@ -492,20 +521,36 @@ class DateTime(Item, datetime):
     A datetime literal.
     """
 
-    def __new__(cls, value, *_):  # type: (..., datetime, ...) -> datetime
+    def __new__(
+        cls,
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        second,
+        microsecond,
+        tzinfo,
+        trivia,
+        raw,
+        **kwargs
+    ):  # type: (int, int, int, int, int, int, int, ..., Trivia, ...) -> datetime
         return datetime.__new__(
             cls,
-            value.year,
-            value.month,
-            value.day,
-            value.hour,
-            value.minute,
-            value.second,
-            value.microsecond,
-            tzinfo=value.tzinfo,
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+            microsecond,
+            tzinfo=tzinfo,
+            **kwargs
         )
 
-    def __init__(self, _, trivia, raw):  # type: (datetime, Trivia, str) -> None
+    def __init__(
+        self, year, month, day, hour, minute, second, microsecond, tzinfo, trivia, raw
+    ):  # type: (int, int, int, int, int, int, int, ..., Trivia) -> None
         super(DateTime, self).__init__(trivia)
 
         self._raw = raw
@@ -522,12 +567,36 @@ class DateTime(Item, datetime):
         return self._raw
 
     def __add__(self, other):
-        result = super(DateTime, self).__add__(other)
+        if PY38:
+            result = datetime(
+                self.year,
+                self.month,
+                self.day,
+                self.hour,
+                self.minute,
+                self.second,
+                self.microsecond,
+                self.tzinfo,
+            ).__add__(other)
+        else:
+            result = super(DateTime, self).__add__(other)
 
         return self._new(result)
 
     def __sub__(self, other):
-        result = super(DateTime, self).__sub__(other)
+        if PY38:
+            result = datetime(
+                self.year,
+                self.month,
+                self.day,
+                self.hour,
+                self.minute,
+                self.second,
+                self.microsecond,
+                self.tzinfo,
+            ).__sub__(other)
+        else:
+            result = super(DateTime, self).__sub__(other)
 
         if isinstance(result, datetime):
             result = self._new(result)
@@ -537,20 +606,29 @@ class DateTime(Item, datetime):
     def _new(self, result):
         raw = result.isoformat()
 
-        return DateTime(result, self._trivia, raw)
+        return DateTime(
+            result.year,
+            result.month,
+            result.day,
+            result.hour,
+            result.minute,
+            result.second,
+            result.microsecond,
+            result.tzinfo,
+            self._trivia,
+            raw,
+        )
 
     def _getstate(self, protocol=3):
         return (
-            datetime(
-                self.year,
-                self.month,
-                self.day,
-                self.hour,
-                self.minute,
-                self.second,
-                self.microsecond,
-                self.tzinfo,
-            ),
+            self.year,
+            self.month,
+            self.day,
+            self.hour,
+            self.minute,
+            self.second,
+            self.microsecond,
+            self.tzinfo,
             self._trivia,
             self._raw,
         )
@@ -561,10 +639,12 @@ class Date(Item, date):
     A date literal.
     """
 
-    def __new__(cls, value, *_):  # type: (..., date, ...) -> date
-        return date.__new__(cls, value.year, value.month, value.day)
+    def __new__(cls, year, month, day, *_):  # type: (int, int, int, ...) -> date
+        return date.__new__(cls, year, month, day)
 
-    def __init__(self, _, trivia, raw):  # type: (date, Trivia, str) -> None
+    def __init__(
+        self, year, month, day, trivia, raw
+    ):  # type: (int, int, int, Trivia, str) -> None
         super(Date, self).__init__(trivia)
 
         self._raw = raw
@@ -581,22 +661,31 @@ class Date(Item, date):
         return self._raw
 
     def __add__(self, other):
-        result = super(Date, self).__add__(other)
+        if PY38:
+            result = date(self.year, self.month, self.day).__add__(other)
+        else:
+            result = super(Date, self).__add__(other)
 
         return self._new(result)
 
     def __sub__(self, other):
-        result = super(Date, self).__sub__(other)
+        if PY38:
+            result = date(self.year, self.month, self.day).__sub__(other)
+        else:
+            result = super(Date, self).__sub__(other)
 
-        return self._new(result)
+        if isinstance(result, date):
+            result = self._new(result)
+
+        return result
 
     def _new(self, result):
         raw = result.isoformat()
 
-        return Date(result, self._trivia, raw)
+        return Date(result.year, result.month, result.day, self._trivia, raw)
 
     def _getstate(self, protocol=3):
-        return (datetime(self.year, self.month, self.day), self._trivia, self._raw)
+        return (self.year, self.month, self.day, self._trivia, self._raw)
 
 
 class Time(Item, time):
@@ -604,12 +693,14 @@ class Time(Item, time):
     A time literal.
     """
 
-    def __new__(cls, value, *_):  # type: (time, ...) -> time
-        return time.__new__(
-            cls, value.hour, value.minute, value.second, value.microsecond
-        )
+    def __new__(
+        cls, hour, minute, second, microsecond, tzinfo, *_
+    ):  # type: (int, int, int, int, ...) -> time
+        return time.__new__(cls, hour, minute, second, microsecond, tzinfo)
 
-    def __init__(self, _, trivia, raw):  # type: (time, Trivia, str) -> None
+    def __init__(
+        self, hour, minute, second, microsecond, tzinfo, trivia, raw
+    ):  # type: (int, int, int, int, Trivia, str) -> None
         super(Time, self).__init__(trivia)
 
         self._raw = raw
@@ -627,7 +718,11 @@ class Time(Item, time):
 
     def _getstate(self, protocol=3):
         return (
-            time(self.hour, self.minute, self.second, self.microsecond, self.tzinfo),
+            self.hour,
+            self.minute,
+            self.second,
+            self.microsecond,
+            self.tzinfo,
             self._trivia,
             self._raw,
         )
@@ -809,6 +904,20 @@ class Table(Item, dict):
 
         return self
 
+    def raw_append(self, key, _item):  # type: (Union[Key, str], Any) -> Table
+        if not isinstance(_item, Item):
+            _item = item(_item)
+
+        self._value.append(key, _item)
+
+        if isinstance(key, Key):
+            key = key.key
+
+        if key is not None:
+            super(Table, self).__setitem__(key, _item)
+
+        return self
+
     def remove(self, key):  # type: (Union[Key, str]) -> Table
         self._value.remove(key)
 
@@ -862,6 +971,9 @@ class Table(Item, dict):
         for k, v in other.items():
             self[k] = v
 
+    def get(self, key, default=None):  # type: (Any, Optional[Any]) -> Any
+        return self._value.get(key, default)
+
     def __contains__(self, key):  # type: (Union[Key, str]) -> bool
         return key in self._value
 
@@ -896,6 +1008,9 @@ class Table(Item, dict):
     def __repr__(self):
         return super(Table, self).__repr__()
 
+    def __str__(self):
+        return str(self.value)
+
     def _getstate(self, protocol=3):
         return (
             self._value,
@@ -913,11 +1028,12 @@ class InlineTable(Item, dict):
     """
 
     def __init__(
-        self, value, trivia
-    ):  # type: (tomlkit.container.Container, Trivia) -> None
+        self, value, trivia, new=False
+    ):  # type: (tomlkit.container.Container, Trivia, bool) -> None
         super(InlineTable, self).__init__(trivia)
 
         self._value = value
+        self._new = new
 
         for k, v in self._value.body:
             if k is not None:
@@ -987,6 +1103,8 @@ class InlineTable(Item, dict):
 
             if i != len(self._value.body) - 1:
                 buf += ","
+                if self._new:
+                    buf += " "
 
         buf += "}"
 
@@ -1007,6 +1125,9 @@ class InlineTable(Item, dict):
     def update(self, other):  # type: (Dict) -> None
         for k, v in other.items():
             self[k] = v
+
+    def get(self, key, default=None):  # type: (Any, Optional[Any]) -> Any
+        return self._value.get(key, default)
 
     def __contains__(self, key):  # type: (Union[Key, str]) -> bool
         return key in self._value

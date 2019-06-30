@@ -497,6 +497,14 @@ class Container(dict):
     ):  # type: (Union[Key, str], Any) -> Union[Item, Container]
         if key not in self:
             self[key] = default
+
+    def get(self, key, default=None):  # type: (Any, Optional[Any]) -> Any
+        if not isinstance(key, Key):
+            key = Key(key)
+
+        if key not in self:
+            return default
+
         return self[key]
 
     def __contains__(self, key):  # type: (Union[Key, str]) -> bool
@@ -529,7 +537,10 @@ class Container(dict):
 
         item = self._body[idx][1]
 
-        return item.value
+        if item.is_boolean():
+            return item.value
+
+        return item
 
     def __setitem__(self, key, value):  # type: (Union[Key, str], Any) -> None
         if key is not None and key in self:
