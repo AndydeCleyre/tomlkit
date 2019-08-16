@@ -497,6 +497,7 @@ class Container(dict):
     ):  # type: (Union[Key, str], Any) -> Union[Item, Container]
         if key not in self:
             self[key] = default
+        return self[key]
 
     def get(self, key, default=None):  # type: (Any, Optional[Any]) -> Any
         if not isinstance(key, Key):
